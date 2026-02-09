@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # Smart Money Monitor - WebSocket listener
+  monitor:
+    build: .
+    container_name: smart-money-monitor
+    command: python code/smart_money_monitor.py
+    environment:
+      - DB_PATH=/app/data/smart_money_tracker.db
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    networks:
+      - smart-money-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Telegram Bot - Alert service
+  telegram-bot:
+    build: .
+    container_name: telegram-alert-bot
+    command: python code/telegram_alert_bot.py
+    environment:
+      - DB_PATH=/app/data/smart_money_tracker.db
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - MIN_SCORE_ALERT=${MIN_SCORE_ALERT:-70}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    depends_on:
+      - monitor
+    networks:
+      - smart-money-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Web Dashboard - Leaderboard UI
+  dashboard:
+    build: .
+    container_name: web-dashboard
+    command: uvicorn code.web_dashboard:app --host 0.0.0.0 --port 8000
+    environment:
+      - DB_PATH=/app/data/smart_money_tracker.db
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    depends_on:
+      - monitor
+    networks:
+      - smart-money-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  smart-money-network:
+    driver: bridge
+
+volumes:
+  data:
